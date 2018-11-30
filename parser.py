@@ -26,7 +26,7 @@ def read_file(path):
                           skiprows = [1,2],
                           index_col = False)
 
-    content.columns = ['timestamp','H2O','PAR','CO2','temp','logger','temp2']
+    content.columns = ['timestamp','Volt','PAR','CO2','temp','logger','H2O']
     
     content.timestamp = pd.to_datetime(content.timestamp)
     content.logger = content.logger.apply(comma_to_int)

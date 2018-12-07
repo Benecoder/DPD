@@ -8,13 +8,13 @@ def comma_to_int(x):
     try:
         return int(float(x.replace(',','.')))
     except ValueError:
-        return np.nan
+        return 0
 
 def comma_to_float(x):
     try:
         return float(x.replace(',','.'))
     except ValueError:
-        return np.nan
+        return 0.0
     
 def read_file(path):
     
@@ -39,10 +39,11 @@ def find_aoi(content):
     print('finding the areas of interest...')
     
     #finds the measurments
-    trigger = (content.logger.values[1:]-content.logger.values[:-1])+7.0
-    start_marks = (trigger > 0.1).nonzero()[0]+1
-    end_marks = (trigger < 0.1).nonzero()[0]
-    
+    content.logger.values[0] = 0
+    trigger = (content.logger.values[1:]-content.logger.values[:-1])
+    trigger = np.sign(trigger)
+    start_marks = (trigger == 1).nonzero()[0]+1
+    end_marks = (trigger ==  -1 ).nonzero()[0]
 
 
     #selects the best measurments
@@ -51,7 +52,9 @@ def find_aoi(content):
     quality = np.zeros(content.shape[0])
     cover_column = pd.Series(index =content.index)
 
-    for measurment in range(len(start_marks)):
+    no_measurments = np.min([len(end_marks),len(start_marks)])
+
+    for measurment in range(no_measurments):
         best_score = 1
         
         measurment_length = end_marks[measurment]-start_marks[measurment]
@@ -59,16 +62,24 @@ def find_aoi(content):
         #if the measurment is shorter than 110 seconds
         if measurment_length < 110/5:
             cover = 't' #transparent cover
-            aoi_length = 90/5
+            aoi_length = int(90/5)
         else:
             cover = 'd' #dark cover
             if measurment_length < 200/5:
-                aoi_length = 180/5
+                aoi_length = int(180/5)
             else:
-                aoi_length = 300/5
-                
+                aoi_length = int(300/5)
         
-        for i in range(start_marks[measurment]-tolerance,end_marks[measurment]+tolerance-aoi_length):
+        #determines the start and end of the logger range, including some tolerance
+        start_of_logger_area = start_marks[measurment]-tolerance
+        if start_of_logger_area <0:
+            start_of_logger_area = 0
+
+        end_of_logger_area = end_marks[measurment]+tolerance-aoi_length
+        if end_of_logger_area > content.shape[0]-aoi_length:
+            end_of_logger_area = content.shape[0]-aoi_length
+
+        for i in range(start_of_logger_area,end_of_logger_area):
             p,cov = np.polyfit(np.arange(aoi_length),content.CO2.values[i:i+aoi_length],1,cov = True)
             if cov[1][0]**2 < best_score:
                 best_score = cov[1][0]**2
@@ -97,11 +108,10 @@ def vis(content,area_of_intrest):
 
     plt.plot(x,content.CO2.values-400,color = 'black')
 
-    plt.bar(x,area_of_intrest*50,alpha = 0.5,color = 'green')
+    plt.bar(x,area_of_intrest*500,alpha = 0.5,color = 'green')
+    norm_logger = (np.sign(content.logger.values)+1)
 
-    norm_logger = (content.logger.values+7)
-    norm_logger /= np.max(norm_logger)
-    plt.bar(x,norm_logger*50,alpha= 0.4,color = 'yellow')
+    plt.bar(x,norm_logger*250,alpha= 0.4,color = 'yellow')
 
     plt.ylabel('CO2 [ppm - 400]')
     plt.xlabel('Measurment_index')
@@ -134,7 +144,7 @@ def write_file(content,area_of_intrest,cover_column,quality):
 if __name__  == '__main__':
     content = read_file(sys.argv[1])
     area_of_intrest,cover_column,quality = find_aoi(content)
- #   vis(content,area_of_intrest)
+    vis(content,area_of_intrest)
  
     #write_file(content,area_of_intrest,cover_column,quality)
     

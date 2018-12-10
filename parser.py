@@ -7,13 +7,13 @@ import sys
 def comma_to_int(x):
     try:
         return int(float(x.replace(',','.')))
-    except ValueError:
-        return 0
+    except:
+        return -1
 
 def comma_to_float(x):
     try:
         return float(x.replace(',','.'))
-    except ValueError:
+    except:
         return 0.0
     
 def read_file(path):
@@ -39,12 +39,24 @@ def find_aoi(content):
     print('finding the areas of interest...')
     
     #finds the measurments
-    content.logger.values[0] = 0
+    content.logger.values[0]  = -1
     trigger = (content.logger.values[1:]-content.logger.values[:-1])
     trigger = np.sign(trigger)
     start_marks = (trigger == 1).nonzero()[0]+1
     end_marks = (trigger ==  -1 ).nonzero()[0]
-
+    
+    #resolves prolonged triggers
+    d_end_marks = end_marks[1:]-end_marks[:-1]
+    d_start_marks = start_marks[1:]-start_marks[:-1]
+    double_end = (d_end_marks == 1).nonzero()[0]
+    double_start = (d_start_marks == 1).nonzero()[0]
+    end_marks = np.delete(end_marks,double_end)
+    start_marks = np.delete(start_marks,double_start)
+    
+    #resolves initiation conflicts
+    if end_marks[0]<start_marks[0]:
+        end_marks = end_marks[1:]
+    
 
     #selects the best measurments
     tolerance = 5 #measurments
@@ -69,7 +81,7 @@ def find_aoi(content):
                 aoi_length = int(180/5)
             else:
                 aoi_length = int(300/5)
-        
+
         #determines the start and end of the logger range, including some tolerance
         start_of_logger_area = start_marks[measurment]-tolerance
         if start_of_logger_area <0:
@@ -78,9 +90,11 @@ def find_aoi(content):
         end_of_logger_area = end_marks[measurment]+tolerance-aoi_length
         if end_of_logger_area > content.shape[0]-aoi_length:
             end_of_logger_area = content.shape[0]-aoi_length
-
+            
+            
         for i in range(start_of_logger_area,end_of_logger_area):
             p,cov = np.polyfit(np.arange(aoi_length),content.CO2.values[i:i+aoi_length],1,cov = True)
+            
             if cov[1][0]**2 < best_score:
                 best_score = cov[1][0]**2
                 best_index = i
@@ -112,7 +126,6 @@ def vis(content,area_of_intrest):
     norm_logger = (np.sign(content.logger.values)+1)
 
     plt.bar(x,norm_logger*250,alpha= 0.4,color = 'yellow')
-
     plt.ylabel('CO2 [ppm - 400]')
     plt.xlabel('Measurment_index')
 
@@ -121,7 +134,7 @@ def vis(content,area_of_intrest):
 
 #building the new file
 #final header 
-def write_file(content,area_of_intrest,cover_column,quality):
+def write_file(result_path,content,area_of_intrest,cover_column,quality):
     
     print('Writing the final file...')
 
@@ -137,14 +150,38 @@ def write_file(content,area_of_intrest,cover_column,quality):
     result['quality'] = quality
     result['H2O'] = content.H2O
 
-    writer = pd.ExcelWriter('result.xlsx')
+    writer = pd.ExcelWriter(result_path+'.xlsx')
     result.to_excel(writer,'Sheet1')
     writer.save()
+    
+def find_names():
+    
+    if len(sys.argv) == 1:
+        print('Requires path to raw file.')
+        print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
+        raise 
+    if len(sys.argv) == 2:
+        if sys.argv[1][-4:] == '.txt':
+            return sys.argv[1],sys.argv[1][-4:]+'.xlsx'
+        else:
+            print('Requires txt file')
+            print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
+            raise 
+    if len(sys.argv) > 2:
+        if sys.argv[1][-4:] == '.txt' and sys.argv[2][-5:] == '.xlsx':
+            return sys.argv[1],sys.argv[2]
+        else:
+            print('Requires txt file as input path and .xlsx file as output path.')
+            print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
+            raise
 
 if __name__  == '__main__':
-    content = read_file(sys.argv[1])
+    
+    path,result_path = find_names()
+    
+    
+    content = read_file(path)
     area_of_intrest,cover_column,quality = find_aoi(content)
-    vis(content,area_of_intrest)
- 
-    #write_file(content,area_of_intrest,cover_column,quality)
+    #vis(content,area_of_intrest)
+    write_file(result_path,content,area_of_intrest,cover_column,quality)
     

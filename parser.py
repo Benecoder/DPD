@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import sys
+import os
 
 def comma_to_int(x):
     try:
@@ -26,11 +27,18 @@ def read_file(path):
                           skiprows = [1,2],
                           index_col = False)
 
-    content.columns = ['timestamp','Volt','PAR','CO2','temp','logger','H2O']
-    
+    if content.shape[1] == 7:
+        content.columns = ['timestamp','Volt','PAR','CO2','temp','logger','H2O']
+    elif content.shape[1] == 6:
+        content.columns = ['timestamp','CO2','PAR','temp','logger','H2O']
+    else:
+        print('Number of columns is unreadble.')
+
+
     content.timestamp = pd.to_datetime(content.timestamp)
     content.logger = content.logger.apply(comma_to_int)
     content.CO2 = content.CO2.apply(comma_to_float)
+
     
     return content
 
@@ -38,6 +46,7 @@ def find_aoi(content):
     
     print('finding the areas of interest...')
     
+
     #finds the measurments
     content.logger.values[0]  = -1
     trigger = (content.logger.values[1:]-content.logger.values[:-1])
@@ -150,7 +159,7 @@ def write_file(result_path,content,area_of_intrest,cover_column,quality):
     result['quality'] = quality
     result['H2O'] = content.H2O
 
-    writer = pd.ExcelWriter(result_path+'.xlsx')
+    writer = pd.ExcelWriter(result_path)
     result.to_excel(writer,'Sheet1')
     writer.save()
     
@@ -162,7 +171,7 @@ def find_names():
         raise 
     if len(sys.argv) == 2:
         if sys.argv[1][-4:] == '.txt':
-            return sys.argv[1],sys.argv[1][-4:]+'.xlsx'
+            return sys.argv[1],sys.argv[1][:-4]+'.xlsx'
         else:
             print('Requires txt file')
             print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
@@ -177,11 +186,49 @@ def find_names():
 
 if __name__  == '__main__':
     
-    path,result_path = find_names()
-    
-    
-    content = read_file(path)
-    area_of_intrest,cover_column,quality = find_aoi(content)
-    #vis(content,area_of_intrest)
-    write_file(result_path,content,area_of_intrest,cover_column,quality)
-    
+    #if it is passed a direcotry
+    if sys.argv[1] in os.listdir('.'):
+
+        print('Formating all files in '+str(sys.argv[1])+' directory.')
+
+        for file in os.listdir(sys.argv[1]):
+            if file[-4:] == '.txt':
+
+                try:
+                    path = sys.argv[1]+'/'+file
+                    result_path = sys.argv[1]+'/'+file[:-4]+'.xlsx'
+
+                    print('---- Now focusing on '+str(file)+' -------')
+
+                    content = read_file(path)
+                    area_of_intrest,cover_column,quality = find_aoi(content)
+                    write_file(result_path,content,area_of_intrest,cover_column,quality)
+
+                    if sys.argv[-1] == '-v':
+                        vis(content,area_of_intrest)
+                except:
+                    print('PROBLEMS WITH FILE: '+str(file))
+
+
+    else:
+        path,result_path = find_names()
+        
+        content = read_file(path)
+        area_of_intrest,cover_column,quality = find_aoi(content)
+
+        write_file(result_path,content,area_of_intrest,cover_column,quality)
+        
+        vis(content,area_of_intrest)
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -5,18 +5,30 @@ import numpy as np
 import sys
 import os
 
+
+#converts incoming strings to integers
 def comma_to_int(x):
     try:
         return int(float(x.replace(',','.')))
     except:
         return -1
 
+
+#converts incoming strings to floats
 def comma_to_float(x):
     try:
         return float(x.replace(',','.'))
     except:
         return 0.0
     
+#Reads the file
+#   Parameters:
+#       path:string
+#       path to the file that should be read
+#   Returns:
+#       content:pandas Data Frame
+#       Dataframe containing the Data. If nescessary string numbers 
+#       have been converted to integer/float.
 def read_file(path):
     
     print('Reading the file...')
@@ -42,7 +54,49 @@ def read_file(path):
     
     return content
 
-def find_aoi(content):
+
+
+#Finds the areas of interest, by determining the lowest covariance 
+#when fitting a linear fit to the areas marked by the logger signal.
+#The Algorithm works as follows:
+# - Triggers are found, i.e. indicies where the logger signal
+#   faises or falls.
+# - Starting from the first raising signal, regions between 
+#   a raising and a falling edge are marked as logger areas.
+# - Based on the length of the logger area the class of measurment
+#   and thus the measurment length is determined. 
+# - Extending the logger area on both ends by 'tolerance'
+#   indicies, a search for the best linear fit is performed.
+#   A fit is performed to every possible compact region of 
+#   the desired measurment length within the logger area. 
+#   The metric used to evaluate the quality of the fit is the
+#   offdiagonal entry in the covariance matrix, squared. 
+#   The lower the better.
+# - A crude measure for the quality of this spicific measurment is
+#   introduced. 1 if everything is fine. 2 if the measurment is short
+#   thus a dark cover is used, but the CO2 have a negative slope
+#   nevertheless.
+# - The Results are returned.
+
+
+#Parameters:
+#   content: Pandas Data Frame
+#   Data Frame containing the column 'logger' and 'CO2'.
+#   tolerance: integer
+#   The number of measurments that are included before and after 
+#   the logger area, that is originally determined by the logger 
+#   Signal.
+#Returns:
+#   markers: Pandas Data Frame
+#   DataFrame with 4 columns. 
+#   1. area_of_interest; 1 if part of an aoi, else 0
+#   2. cover_column; class of measurment, 'd' if dark cover, 
+#   't' if transparent, 
+#   3.quality; 1 if good meaurment 2 if critical, (highly faulty classification)
+#   4.sec_index; a number counting up for every aoi
+
+
+def find_aoi(content,tolerance = 5):
     
     print('finding the areas of interest...')
     
@@ -68,10 +122,10 @@ def find_aoi(content):
     
 
     #selects the best measurments
-    tolerance = 5 #measurments
-    area_of_intrest  = np.zeros(content.shape[0])
+    area_of_interest  = np.zeros(content.shape[0])
     quality = np.zeros(content.shape[0])
     cover_column = pd.Series(index =content.index)
+    sec_index = np.zeros(content.shape[0])
 
     no_measurments = np.min([len(end_marks),len(start_marks)])
 
@@ -110,17 +164,30 @@ def find_aoi(content):
                 best_slope = p[0]
 
         if best_score != 1:
-            area_of_intrest[best_index:best_index+aoi_length+1] = 1
+            area_of_interest[best_index:best_index+aoi_length+1] = 1
             cover_column[best_index:best_index+aoi_length+1] = cover
+            sec_index[best_index:best_index+aoi_length+1] = np.arange(aoi_length+1)+1
             if cover == 'd' and best_slope < 0:
                 quality[best_index:best_index+aoi_length+1] = 2
             else:
                 quality[best_index:best_index+aoi_length+1] = 1
 
-    return area_of_intrest,cover_column,quality
+    markers = pd.DataFrame(index = content.index,
+                            columns = ['area_of_interest','cover_column',
+                                        'quality','sec_index'])
+
+    markers['area_of_interest'] = area_of_interest
+    markers['cover'] = cover_column
+    markers['quality'] = quality
+    markers['sec_index'] = sec_index
+
+
+    return markers
 
 #visualizing
-def vis(content,area_of_intrest):
+#Creates a simple plot of the result weher logger area is marked yellow
+#and aoi green.
+def vis(content,area_of_interest):
     
     print('Visualizing...')
     
@@ -131,7 +198,7 @@ def vis(content,area_of_intrest):
 
     plt.plot(x,content.CO2.values-400,color = 'black')
 
-    plt.bar(x,area_of_intrest*500,alpha = 0.5,color = 'green')
+    plt.bar(x,area_of_interest*500,alpha = 0.5,color = 'green')
     norm_logger = (np.sign(content.logger.values)+1)
 
     plt.bar(x,norm_logger*250,alpha= 0.4,color = 'yellow')
@@ -141,9 +208,16 @@ def vis(content,area_of_intrest):
     plt.show()
 
 
-#building the new file
-#final header 
-def write_file(result_path,content,area_of_intrest,cover_column,quality):
+#Writes the content adn the markes Dataframe into a singe Dataframe
+#and creates a .xlsx sheet from it.
+#Parameters:
+#   result_path: string
+#   Path to where the final result should be stored
+#   content: pandas Data Frame
+#   Data as it is read and formated comming from the read_file function
+#   markers: pandas Data Frame
+#   Data Frame with the markers as created by the find_aoi function. 
+def write_file(result_path,content,markers):
     
     print('Writing the final file...')
 
@@ -153,16 +227,23 @@ def write_file(result_path,content,area_of_intrest,cover_column,quality):
     result['PAR'] = content.PAR
     result['CO2'] = content.CO2
     result['temperature'] = content.temp
-    result['chamber'] = cover_column
+    result['chamber'] = markers.cover_column
     result['Logger'] = content.logger
-    result['AoI'] = area_of_intrest
-    result['quality'] = quality
+    result['sec_index'] = markers.sec_index
+    result['AoI'] = markers.area_of_interest
+    result['quality'] = markers.quality
     result['H2O'] = content.H2O
 
     writer = pd.ExcelWriter(result_path)
     result.to_excel(writer,'Sheet1')
     writer.save()
     
+#determines the names to be used when in single file mode.
+#Returns: 
+#   path: string
+#   Path to where the raw data is stored.
+#   return_path: string
+#   Path to where the result shopuld be written.
 def find_names():
     
     if len(sys.argv) == 1:
@@ -186,7 +267,10 @@ def find_names():
 
 if __name__  == '__main__':
     
-    #if it is passed a direcotry
+    #If it is passed a directory, every file in the directory with a .txt extension is parsed.
+    #When a Problem arises it just screams once and resumes with the next file. 
+    #All files are stored with same name but now with an .xlsx extension.
+    #Visualizes if last parameter is '-v'.
     if sys.argv[1] in os.listdir('.'):
 
         print('Formating all files in '+str(sys.argv[1])+' directory.')
@@ -201,11 +285,11 @@ if __name__  == '__main__':
                     print('---- Now focusing on '+str(file)+' -------')
 
                     content = read_file(path)
-                    area_of_intrest,cover_column,quality = find_aoi(content)
-                    write_file(result_path,content,area_of_intrest,cover_column,quality)
+                    area_of_interest,cover_column,quality = find_aoi(content)
+                    write_file(result_path,content,area_of_interest,cover_column,quality)
 
                     if sys.argv[-1] == '-v':
-                        vis(content,area_of_intrest)
+                        vis(content,area_of_interest)
                 except:
                     print('PROBLEMS WITH FILE: '+str(file))
 
@@ -214,11 +298,11 @@ if __name__  == '__main__':
         path,result_path = find_names()
         
         content = read_file(path)
-        area_of_intrest,cover_column,quality = find_aoi(content)
+        markers = find_aoi(content)
 
-        write_file(result_path,content,area_of_intrest,cover_column,quality)
+        write_file(result_path,content,markers)
         
-        vis(content,area_of_intrest)
+        vis(content,markers.area_of_interest)
 
 
 

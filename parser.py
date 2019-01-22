@@ -119,14 +119,14 @@ def find_aoi(content,tolerance = 5):
     #resolves initiation conflicts
     if end_marks[0]<start_marks[0]:
         end_marks = end_marks[1:]
-    
 
     #selects the best measurments
     area_of_interest  = np.zeros(content.shape[0])
     quality = np.zeros(content.shape[0])
-    cover_column = pd.Series(index =content.index)
+    cover_column = pd.Series(' ' for _ in range(content.shape[0]))
     sec_index = np.zeros(content.shape[0])
 
+    
     no_measurments = np.min([len(end_marks),len(start_marks)])
 
     for measurment in range(no_measurments):
@@ -144,6 +144,7 @@ def find_aoi(content,tolerance = 5):
                 aoi_length = int(180/5)
             else:
                 aoi_length = int(300/5)
+
 
         #determines the start and end of the logger range, including some tolerance
         start_of_logger_area = start_marks[measurment]-tolerance
@@ -166,7 +167,7 @@ def find_aoi(content,tolerance = 5):
         if best_score != 1:
             area_of_interest[best_index:best_index+aoi_length+1] = 1
             cover_column[best_index:best_index+aoi_length+1] = cover
-            sec_index[best_index:best_index+aoi_length+1] = np.arange(aoi_length+1)+1
+            sec_index[best_index:best_index+aoi_length+1] = 5*(np.arange(aoi_length+1)+1)
             if cover == 'd' and best_slope < 0:
                 quality[best_index:best_index+aoi_length+1] = 2
             else:
@@ -175,13 +176,12 @@ def find_aoi(content,tolerance = 5):
     markers = pd.DataFrame(index = content.index,
                             columns = ['area_of_interest','cover_column',
                                         'quality','sec_index'])
+    
 
     markers['area_of_interest'] = area_of_interest
-    markers['cover'] = cover_column
+    markers['cover_column'] = cover_column
     markers['quality'] = quality
     markers['sec_index'] = sec_index
-
-
     return markers
 
 #visualizing
@@ -208,7 +208,7 @@ def vis(content,area_of_interest):
     plt.show()
 
 
-#Writes the content adn the markes Dataframe into a singe Dataframe
+#Writes the content and the markes Dataframe into a singe Dataframe
 #and creates a .xlsx sheet from it.
 #Parameters:
 #   result_path: string
@@ -250,20 +250,22 @@ def find_names():
         print('Requires path to raw file.')
         print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
         raise 
-    if len(sys.argv) == 2:
+        
+    if sys.argv[2][-5:] == '.xlsx':
+        if sys.argv[1][-4:] == '.txt':
+            return sys.argv[1],sys.argv[2]
+        else:
+            print('Requires txt file as input path and .xlsx file as output path.')
+            print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
+            raise
+        
+    else:
         if sys.argv[1][-4:] == '.txt':
             return sys.argv[1],sys.argv[1][:-4]+'.xlsx'
         else:
             print('Requires txt file')
             print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
             raise 
-    if len(sys.argv) > 2:
-        if sys.argv[1][-4:] == '.txt' and sys.argv[2][-5:] == '.xlsx':
-            return sys.argv[1],sys.argv[2]
-        else:
-            print('Requires txt file as input path and .xlsx file as output path.')
-            print('Usage: parser.py "path to raw .txt file" ["desired path to result file"]')
-            raise
 
 if __name__  == '__main__':
     
@@ -271,7 +273,7 @@ if __name__  == '__main__':
     #When a Problem arises it just screams once and resumes with the next file. 
     #All files are stored with same name but now with an .xlsx extension.
     #Visualizes if last parameter is '-v'.
-    if sys.argv[1] in os.listdir('.'):
+    if os.path.isdir(sys.argv[1]):
 
         print('Formating all files in '+str(sys.argv[1])+' directory.')
 
@@ -285,11 +287,11 @@ if __name__  == '__main__':
                     print('---- Now focusing on '+str(file)+' -------')
 
                     content = read_file(path)
-                    area_of_interest,cover_column,quality = find_aoi(content)
-                    write_file(result_path,content,area_of_interest,cover_column,quality)
+                    markers = find_aoi(content)
+                    write_file(result_path,content,markers)
 
                     if sys.argv[-1] == '-v':
-                        vis(content,area_of_interest)
+                        vis(content,markers.area_of_interest)
                 except:
                     print('PROBLEMS WITH FILE: '+str(file))
 
@@ -302,7 +304,8 @@ if __name__  == '__main__':
 
         write_file(result_path,content,markers)
         
-        vis(content,markers.area_of_interest)
+        if sys.argv[-1] == '-v':
+            vis(content,markers.area_of_interest)
 
 
 

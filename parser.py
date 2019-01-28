@@ -65,6 +65,7 @@ def read_file(path):
 #   a raising and a falling edge are marked as logger areas.
 # - Based on the length of the logger area the class of measurment
 #   and thus the measurment length is determined. 
+#   Possible classes are transparent/short or dark/long.
 # - Extending the logger area on both ends by 'tolerance'
 #   indicies, a search for the best linear fit is performed.
 #   A fit is performed to every possible compact region of 
@@ -92,8 +93,8 @@ def read_file(path):
 #   1. area_of_interest; 1 if part of an aoi, else 0
 #   2. cover_column; class of measurment, 'd' if dark cover, 
 #   't' if transparent, 
-#   3.quality; 1 if good meaurment 2 if critical, (highly faulty classification)
-#   4.sec_index; a number counting up for every aoi
+#   3.quality: 1 if good meaurment 2 if critical, (highly faulty classification)
+#   4.sec_index: a number counting up for every aoi
 
 
 def find_aoi(content,tolerance = 5):
@@ -269,6 +270,11 @@ def find_names():
 
 if __name__  == '__main__':
     
+    if len(sys.argv) == 1:
+        print('Path to the source data is not specified!')
+        raise
+    
+    
     #If it is passed a directory, every file in the directory with a .txt extension is parsed.
     #When a Problem arises it just screams once and resumes with the next file. 
     #All files are stored with same name but now with an .xlsx extension.
@@ -295,7 +301,9 @@ if __name__  == '__main__':
                 except:
                     print('PROBLEMS WITH FILE: '+str(file))
 
-
+    #If it is passed a path to a file it just parses the one file.
+    #File names are decided upon by find_names(). 
+    #Visualizes if las parameter is '-v'.
     else:
         path,result_path = find_names()
         
@@ -306,16 +314,3 @@ if __name__  == '__main__':
         
         if sys.argv[-1] == '-v':
             vis(content,markers.area_of_interest)
-
-
-
-
-
-
-
-
-
-
-
-
-

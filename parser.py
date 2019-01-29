@@ -168,7 +168,7 @@ def find_aoi(content,tolerance = 5):
         if best_score != 1:
             area_of_interest[best_index:best_index+aoi_length+1] = 1
             cover_column[best_index:best_index+aoi_length+1] = cover
-            sec_index[best_index:best_index+aoi_length+1] = 5*(np.arange(aoi_length+1)+1)
+            sec_index[best_index:best_index+aoi_length+1] = 5*(np.arange(aoi_length+1))
             if cover == 'd' and best_slope < 0:
                 quality[best_index:best_index+aoi_length+1] = 2
             else:

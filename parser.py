@@ -248,7 +248,7 @@ if __name__  == '__main__':
 
     args = parser.parse_args()
 
-    #assambles the paths to the files
+    #assembles the paths to the files
     if os.path.isdir(args.source):
         files = []
         for file in os.listdir(args.source):
